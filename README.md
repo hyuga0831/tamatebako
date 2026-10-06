@@ -56,6 +56,12 @@ npm run build    # dist/ に本番用のファイルを作る
 
 言語の長文は約 280 字で、本番（400〜600 字）より短い。その分、アプリ内の制限時間を本番の約 7 割に縮めている（`formats.ts` の `timeScale`）。
 
+## 公開
+
+- 公開先：GitHub Pages（https://hyuga0831.github.io/tamatebako/ 。独自ドメイン `tamatebako.tougaxx.com` を付ける予定）
+- `main` に push すると、`.github/workflows/deploy.yml` がテスト → ビルド → 公開まで行う。テストが落ちたら公開されない。
+- 学習の記録は URL（オリジン）ごとに別になる。公開先の URL を変えるときは、先に設定画面の「書き出す」で記録を控える。
+
 ## 動作確認
 
 ```
