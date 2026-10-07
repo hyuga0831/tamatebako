@@ -2,7 +2,7 @@
 // 本番は 29問／15分（1問 約31秒）または 40問／35分。1 つの図表に設問が 2〜4 問続く。
 import type { CalcQ, Choice, Figure } from '../lib/types';
 import { type Rng, int, pick, shuffle } from '../lib/rng';
-import { numChoices, labelChoices, clearBest, fmt } from './choices';
+import { numChoices, labelChoices, clearBest, fmt, trap, WHY } from './choices';
 
 export const ZUHYO_PATTERNS = {
   rate: '増減率（前年比）',
@@ -21,6 +21,7 @@ interface Q {
   prompt: string;
   choices: Choice[];
   answer: number;
+  choiceNotes?: (string | undefined)[];
   explain: string[];
 }
 type QMaker = () => Q | null;
@@ -32,7 +33,7 @@ interface Scene {
 const mkQ = (
   pattern: ZuhyoPattern,
   prompt: string,
-  c: { choices: Choice[]; answer: number },
+  c: { choices: Choice[]; answer: number; choiceNotes?: (string | undefined)[] },
   explain: string[],
 ): Q => ({ pattern, prompt, ...c, explain });
 
@@ -93,7 +94,7 @@ function companySales(r: Rng): Scene {
       return mkQ(
         'rate',
         `${names[c]}の${years[t]}の売上高は、前年度と比べておよそ何％${up ? '増加' : '減少'}したか。`,
-        numChoices(r, Math.abs(g), { dp: 1, unit: '%', traps: [(Math.abs(b - a) / b) * 100] }),
+        numChoices(r, Math.abs(g), { dp: 1, unit: '%', traps: [trap((Math.abs(b - a) / b) * 100, WHY.denom)] }),
         [
           '増減率 ＝ (今年 − 前年) ÷ 前年。分母は必ず「前年」',
           `(${fmt(b)} − ${fmt(a)}) ÷ ${fmt(a)} ＝ ${f1(g)}%  →  約 ${f1(Math.abs(g))}% の${up ? '増加' : '減少'}`,
@@ -109,7 +110,7 @@ function companySales(r: Rng): Scene {
       return mkQ(
         'share',
         `${years[t]}の5社の売上高合計に占める${names[c]}の割合は、およそ何％か。`,
-        numChoices(r, (v / total) * 100, { dp: 1, unit: '%', traps: [(v / (total - v)) * 100] }),
+        numChoices(r, (v / total) * 100, { dp: 1, unit: '%', traps: [trap((v / (total - v)) * 100, WHY.exclude)] }),
         [`5社の合計 ＝ ${col.map((x) => fmt(x)).join(' ＋ ')} ＝ ${fmt(total)}`, `${fmt(v)} ÷ ${fmt(total)} ＝ 約 ${f1((v / total) * 100)}%`],
       );
     },
@@ -123,7 +124,7 @@ function companySales(r: Rng): Scene {
       return mkQ(
         'ratio',
         `${years[t]}において、${names[c]}の売上高は${names[e]}のおよそ何倍か。`,
-        numChoices(r, x, { dp, unit: '倍', traps: [1 / x] }),
+        numChoices(r, x, { dp, unit: '倍', traps: [trap(1 / x, WHY.inverse)] }),
         ['「A は B の何倍か」＝ A ÷ B（「の」のほうで割る）', `${fmt(data[c][t])} ÷ ${fmt(data[e][t])} ＝ 約 ${fmt(x, dp)}倍`],
       );
     },
@@ -133,7 +134,7 @@ function companySales(r: Rng): Scene {
       return mkQ(
         'sum',
         `${names[c]}の4年間の売上高の平均は、およそいくらか。`,
-        numChoices(r, total / 4, { unit: '百万円', traps: [total / 5, total / 3] }),
+        numChoices(r, total / 4, { unit: '百万円', traps: [trap(total / 5, WHY.count), trap(total / 3, WHY.count)] }),
         [`4年間の合計 ＝ ${data[c].map((x) => fmt(x)).join(' ＋ ')} ＝ ${fmt(total)}`, `${fmt(total)} ÷ 4 ＝ 約 ${fmt(total / 4)}百万円`],
       );
     },
@@ -175,7 +176,7 @@ function branchPerCapita(r: Rng): Scene {
       return mkQ(
         'perunit',
         `${names[c]}の従業員1人あたりの売上高は、およそ何万円か。`,
-        numChoices(r, v, { unit: '万円', traps: [per[(c + 1) % 5] * 100, per[(c + 2) % 5] * 100] }),
+        numChoices(r, v, { unit: '万円', traps: [trap(per[(c + 1) % 5] * 100, WHY.otherRow), trap(per[(c + 2) % 5] * 100, WHY.otherRow)] }),
         [
           `売上高 ÷ 従業員数 ＝ ${fmt(sales[c])} ÷ ${staff[c]} ＝ 約 ${f2(per[c])}（百万円）`,
           `単位をそろえる： 1百万円 ＝ 100万円 なので 約 ${fmt(v)}万円`,
@@ -196,7 +197,7 @@ function branchPerCapita(r: Rng): Scene {
       return mkQ(
         'share',
         `5支店の従業員数の合計に占める${names[c]}の割合は、およそ何％か。`,
-        numChoices(r, (staff[c] / total) * 100, { dp: 1, unit: '%', traps: [(staff[c] / (total - staff[c])) * 100] }),
+        numChoices(r, (staff[c] / total) * 100, { dp: 1, unit: '%', traps: [trap((staff[c] / (total - staff[c])) * 100, WHY.exclude)] }),
         [`従業員数の合計 ＝ ${staff.join(' ＋ ')} ＝ ${total}`, `${staff[c]} ÷ ${total} ＝ 約 ${f1((staff[c] / total) * 100)}%`],
       );
     },
@@ -209,7 +210,7 @@ function branchPerCapita(r: Rng): Scene {
       return mkQ(
         'ratio',
         `${names[c]}の売上高は、${names[e]}のおよそ何倍か。`,
-        numChoices(r, x, { dp, unit: '倍', traps: [1 / x] }),
+        numChoices(r, x, { dp, unit: '倍', traps: [trap(1 / x, WHY.inverse)] }),
         ['「A は B の何倍か」＝ A ÷ B', `${fmt(sales[c])} ÷ ${fmt(sales[e])} ＝ 約 ${fmt(x, dp)}倍`],
       );
     },
@@ -240,7 +241,7 @@ function pieSales(r: Rng): Scene {
       return mkQ(
         'amount',
         `「${parts[c]}」の${noun}はいくらか。`,
-        numChoices(r, amount(c), { unit, exact: true, traps: [amount(e), amount((c + 2) % 5)] }),
+        numChoices(r, amount(c), { unit, exact: true, traps: [trap(amount(e), WHY.otherRow), trap(amount((c + 2) % 5), WHY.otherRow)] }),
         ['実数 ＝ 全体 × 構成比', `${fmt(total)} × ${pcts[c] / 100} ＝ ${fmt(amount(c))}${unit}`],
       );
     },
@@ -252,7 +253,7 @@ function pieSales(r: Rng): Scene {
       return mkQ(
         'ratio',
         `「${parts[c]}」の${noun}は、「${parts[e]}」のおよそ何倍か。`,
-        numChoices(r, x, { dp, unit: '倍', traps: [1 / x] }),
+        numChoices(r, x, { dp, unit: '倍', traps: [trap(1 / x, WHY.inverse)] }),
         ['同じ全体に対する割合どうしなので、総額を使わず構成比だけで比べられる', `${pcts[c]} ÷ ${pcts[e]} ＝ 約 ${fmt(x, dp)}倍`],
       );
     },
@@ -265,7 +266,7 @@ function pieSales(r: Rng): Scene {
       return mkQ(
         'sum',
         `「${parts[c]}」と「${parts[e]}」の${noun}の${diff ? '差' : '合計'}はいくらか。`,
-        numChoices(r, (total * p) / 100, { unit, exact: true, traps: [(total * other) / 100, amount(c)] }),
+        numChoices(r, (total * p) / 100, { unit, exact: true, traps: [trap((total * other) / 100, WHY.sumDiff), trap(amount(c), WHY.part)] }),
         [
           `先に構成比を${diff ? '引く' : '足す'}： ${pcts[c]} ${diff ? '−' : '＋'} ${pcts[e]} ＝ ${p}%`,
           `${fmt(total)} × ${p / 100} ＝ ${fmt((total * p) / 100)}${unit}`,
@@ -279,7 +280,7 @@ function pieSales(r: Rng): Scene {
       return mkQ(
         'chain',
         `来期、「${parts[c]}」の${noun}だけが${x}%増え、ほかは変わらないとすると、総額はおよそいくらになるか。`,
-        numChoices(r, total + inc, { unit, traps: [total * (1 + x / 100), total + amount(c)] }),
+        numChoices(r, total + inc, { unit, traps: [trap(total * (1 + x / 100), WHY.wholeUp), total + amount(c)] }),
         [
           `「${parts[c]}」の${noun} ＝ ${fmt(total)} × ${pcts[c] / 100} ＝ ${fmt(amount(c))}`,
           `増える分 ＝ ${fmt(amount(c))} × ${x / 100} ＝ ${f1(inc)}`,
@@ -320,7 +321,7 @@ function bandYears(r: Rng): Scene {
       return mkQ(
         'amount',
         `${years[y]}の「${parts[p]}」の売上高はいくらか。`,
-        numChoices(r, amount(y, p), { unit: '億円', exact: true, traps: [amount((y + 1) % 3, p), amount(y, (p + 1) % 4)] }),
+        numChoices(r, amount(y, p), { unit: '億円', exact: true, traps: [trap(amount((y + 1) % 3, p), WHY.otherRow), trap(amount(y, (p + 1) % 4), WHY.otherRow)] }),
         ['実数 ＝ その年度の総額 × 構成比', `${fmt(totals[y])} × ${pcts[y][p] / 100} ＝ ${fmt(amount(y, p))}億円`],
       );
     },
@@ -338,7 +339,7 @@ function bandYears(r: Rng): Scene {
         numChoices(r, Math.abs(g), {
           dp: 1,
           unit: '%',
-          traps: [Math.abs(growth(pcts[a][p], pcts[b][p])), Math.abs(growth(totals[a], totals[b])), Math.abs(pcts[b][p] - pcts[a][p])],
+          traps: [trap(Math.abs(growth(pcts[a][p], pcts[b][p])), WHY.pctOnly), trap(Math.abs(growth(totals[a], totals[b])), WHY.totalOnly), trap(Math.abs(pcts[b][p] - pcts[a][p]), WHY.point)],
         }),
         [
           '構成比どうしを比べない。総額が違うので、まず実額に直す',
@@ -356,7 +357,7 @@ function bandYears(r: Rng): Scene {
       return mkQ(
         'ratio',
         `${years[y]}において、「${parts[p]}」の売上高は「${parts[q]}」のおよそ何倍か。`,
-        numChoices(r, x, { dp, unit: '倍', traps: [1 / x] }),
+        numChoices(r, x, { dp, unit: '倍', traps: [trap(1 / x, WHY.inverse)] }),
         ['同じ年度の中なら、構成比だけで比べられる', `${pcts[y][p]} ÷ ${pcts[y][q]} ＝ 約 ${fmt(x, dp)}倍`],
       );
     },
@@ -369,7 +370,7 @@ function bandYears(r: Rng): Scene {
       return mkQ(
         'sum',
         `${years[b]}の「${parts[p]}」の売上高は、${years[a]}より何億円多いか。`,
-        numChoices(r, d, { unit: '億円', exact: true, traps: [totals[b] - totals[a], amount(b, p)] }),
+        numChoices(r, d, { unit: '億円', exact: true, traps: [trap(totals[b] - totals[a], WHY.totalOnly), trap(amount(b, p), WHY.part)] }),
         [
           `${years[b]}： ${fmt(totals[b])} × ${pcts[b][p] / 100} ＝ ${fmt(amount(b, p))}`,
           `${years[a]}： ${fmt(totals[a])} × ${pcts[a][p] / 100} ＝ ${fmt(amount(a, p))}`,
@@ -406,7 +407,7 @@ function barTrend(r: Rng): Scene {
       return mkQ(
         'rate',
         `${years[t]}の${noun}の対前年${up ? '増加' : '減少'}率は、およそ何％か。`,
-        numChoices(r, Math.abs(g), { dp: 1, unit: '%', traps: [(Math.abs(vals[t] - vals[t - 1]) / vals[t]) * 100] }),
+        numChoices(r, Math.abs(g), { dp: 1, unit: '%', traps: [trap((Math.abs(vals[t] - vals[t - 1]) / vals[t]) * 100, WHY.denom)] }),
         ['対前年増減率 ＝ (今年 − 前年) ÷ 前年', `(${vals[t]} − ${vals[t - 1]}) ÷ ${vals[t - 1]} ＝ 約 ${f1(g)}%`],
       );
     },
@@ -415,7 +416,7 @@ function barTrend(r: Rng): Scene {
       return mkQ(
         'sum',
         `6年間の${noun}の平均は、およそいくらか。`,
-        numChoices(r, total / 6, { dp: 1, unit, traps: [total / 5, (Math.max(...vals) + Math.min(...vals)) / 2] }),
+        numChoices(r, total / 6, { dp: 1, unit, traps: [trap(total / 5, WHY.count), trap((Math.max(...vals) + Math.min(...vals)) / 2, WHY.midpoint)] }),
         [`合計 ＝ ${vals.join(' ＋ ')} ＝ ${fmt(total)}`, `${fmt(total)} ÷ 6 ＝ 約 ${f1(total / 6)}${unit}`],
       );
     },
@@ -426,7 +427,7 @@ function barTrend(r: Rng): Scene {
       return mkQ(
         'chain',
         `${years[5]}の対前年増加率と同じ率で翌年も増加すると、翌年の${noun}はおよそいくらになるか。`,
-        numChoices(r, next, { unit, traps: [b + (b - a), b * (1 + (b - a) / b)] }),
+        numChoices(r, next, { unit, traps: [trap(b + (b - a), WHY.linearNext), trap(b * (1 + (b - a) / b), WHY.denom)] }),
         [
           `${years[5]}は前年の ${b} ÷ ${a} ＝ 約 ${fmt(b / a, 3)} 倍`,
           `翌年 ＝ ${b} × ${fmt(b / a, 3)} ＝ 約 ${fmt(next)}${unit}`,
@@ -455,7 +456,7 @@ function barTrend(r: Rng): Scene {
       return mkQ(
         'ratio',
         `${noun}が最も多い年は、最も少ない年のおよそ何倍か。`,
-        numChoices(r, x, { dp, unit: '倍', traps: [lo / hi, vals[5] / vals[0]] }),
+        numChoices(r, x, { dp, unit: '倍', traps: [trap(lo / hi, WHY.inverse), trap(vals[5] / vals[0], WHY.otherRow)] }),
         [`最多は ${hi}${unit}、最少は ${lo}${unit}`, `${hi} ÷ ${lo} ＝ 約 ${fmt(x, dp)}倍`],
       );
     },
@@ -501,7 +502,7 @@ function lineTwo(r: Rng): Scene {
       return mkQ(
         'ratio',
         `2市の降水量の差が最も大きい月の差は、最も小さい月の差のおよそ何倍か。`,
-        numChoices(r, x, { dp: 1, unit: '倍', traps: [diffs[lo] / diffs[hi], Math.max(...a) / Math.min(...a)] }),
+        numChoices(r, x, { dp: 1, unit: '倍', traps: [trap(diffs[lo] / diffs[hi], WHY.inverse), Math.max(...a) / Math.min(...a)] }),
         [`差（mm）： ${list}`, `最大 ${diffs[hi]} ÷ 最小 ${diffs[lo]} ＝ 約 ${f1(x)}倍`],
       );
     },
@@ -512,7 +513,7 @@ function lineTwo(r: Rng): Scene {
       return mkQ(
         'sum',
         `${first ? na : nb}の5か月間の平均降水量は、およそ何mmか。`,
-        numChoices(r, total / 5, { dp: 1, unit: 'mm', traps: [sumOf(first ? b : a) / 5, total / 4] }),
+        numChoices(r, total / 5, { dp: 1, unit: 'mm', traps: [trap(sumOf(first ? b : a) / 5, WHY.otherRow), trap(total / 4, WHY.count)] }),
         [`合計 ＝ ${vs.join(' ＋ ')} ＝ ${fmt(total)}`, `${fmt(total)} ÷ 5 ＝ 約 ${f1(total / 5)}mm`],
       );
     },
@@ -527,7 +528,7 @@ function lineTwo(r: Rng): Scene {
       return mkQ(
         'rate',
         `${first ? na : nb}の降水量は、${months[i]}から${months[j]}にかけておよそ何％${up ? '増加' : '減少'}したか。`,
-        numChoices(r, Math.abs(g), { dp: 1, unit: '%', traps: [(Math.abs(vs[j] - vs[i]) / vs[j]) * 100] }),
+        numChoices(r, Math.abs(g), { dp: 1, unit: '%', traps: [trap((Math.abs(vs[j] - vs[i]) / vs[j]) * 100, WHY.denom)] }),
         [`(${vs[j]} − ${vs[i]}) ÷ ${vs[i]} ＝ 約 ${f1(g)}%`, '分母は「変化する前」の値'],
       );
     },
@@ -575,7 +576,7 @@ function growthTable(r: Rng): Scene {
       return mkQ(
         'chain',
         `${names[c]}の${from}の売上高を X とすると、${years[s + 1]}の売上高はどのように表されるか。最も近いものを選びなさい。`,
-        numChoices(r, k, { dp: 2, unit: 'X', traps: [1 + (r1 + r2) / 100, mult(r1), mult(r2)] }),
+        numChoices(r, k, { dp: 2, unit: 'X', traps: [trap(1 + (r1 + r2) / 100, WHY.additive), trap(mult(r1), WHY.oneYear), trap(mult(r2), WHY.oneYear)] }),
         [
           `${years[s]}： X × ${fmt(mult(r1), 2)}　→　${years[s + 1]}： さらに × ${fmt(mult(r2), 2)}`,
           `${fmt(mult(r1), 2)} × ${fmt(mult(r2), 2)} ＝ ${fmt(k, 4)}  →  約 ${f2(k)}X`,
@@ -590,7 +591,7 @@ function growthTable(r: Rng): Scene {
       return mkQ(
         'chain',
         `${names[c]}の${yb}年の売上高が${fmt(base)}億円だったとき、${years[1]}の売上高はおよそ何億円か。`,
-        numChoices(r, base * k, { unit: '億円', traps: [base * (1 + (data[c][0] + data[c][1]) / 100), base * mult(data[c][0])] }),
+        numChoices(r, base * k, { unit: '億円', traps: [trap(base * (1 + (data[c][0] + data[c][1]) / 100), WHY.additive), trap(base * mult(data[c][0]), WHY.oneYear)] }),
         [
           `${fmt(base)} × ${fmt(mult(data[c][0]), 2)} × ${fmt(mult(data[c][1]), 2)} ＝ 約 ${fmt(base * k)}億円`,
           '2年分の増減率を、倍率にして続けてかける',
@@ -629,7 +630,7 @@ function storePerCustomer(r: Rng): Scene {
       return mkQ(
         'perunit',
         `${names[c]}の来客1人あたりの売上高は、およそ何円か。`,
-        numChoices(r, per[c], { unit: '円', traps: [per[(c + 1) % 5], per[(c + 3) % 5]] }),
+        numChoices(r, per[c], { unit: '円', traps: [trap(per[(c + 1) % 5], WHY.otherRow), trap(per[(c + 3) % 5], WHY.otherRow)] }),
         [
           `売上高は「千円」単位： ${fmt(sales[c])}千円 ＝ ${fmt(sales[c] * 1000)}円`,
           `${fmt(sales[c] * 1000)} ÷ ${fmt(customers[c])} ＝ 約 ${fmt(per[c])}円`,
@@ -650,7 +651,7 @@ function storePerCustomer(r: Rng): Scene {
       return mkQ(
         'share',
         `5店舗の売上高の合計に占める${names[c]}の割合は、およそ何％か。`,
-        numChoices(r, (sales[c] / total) * 100, { dp: 1, unit: '%', traps: [(customers[c] / sumOf(customers)) * 100] }),
+        numChoices(r, (sales[c] / total) * 100, { dp: 1, unit: '%', traps: [trap((customers[c] / sumOf(customers)) * 100, WHY.otherRow)] }),
         [`売上高の合計 ＝ ${fmt(total)}千円`, `${fmt(sales[c])} ÷ ${fmt(total)} ＝ 約 ${f1((sales[c] / total) * 100)}%`],
       );
     },
@@ -659,7 +660,7 @@ function storePerCustomer(r: Rng): Scene {
       return mkQ(
         'sum',
         '5店舗の売上高の合計は、およそ何万円か。',
-        numChoices(r, total / 10, { dp: 1, unit: '万円', traps: [total / 100, total / 5] }),
+        numChoices(r, total / 10, { dp: 1, unit: '万円', traps: [trap(total / 100, WHY.unit), total / 5] }),
         [`合計 ＝ ${sales.map((x) => fmt(x)).join(' ＋ ')} ＝ ${fmt(total)}千円`, `1万円 ＝ 10千円 なので ${fmt(total)} ÷ 10 ＝ ${f1(total / 10)}万円`],
       );
     },
@@ -697,7 +698,7 @@ function ageShare(r: Rng): Scene {
       return mkQ(
         'amount',
         `${years[y]}の「${ages[a]}」の${noun}は、およそ何千人か。`,
-        numChoices(r, amount(y, a), { unit: '千人', traps: [amount(y, (a + 1) % 4), amount((y + 1) % 3, a)] }),
+        numChoices(r, amount(y, a), { unit: '千人', traps: [trap(amount(y, (a + 1) % 4), WHY.otherRow), trap(amount((y + 1) % 3, a), WHY.otherRow)] }),
         ['実数 ＝ 総数 × 構成比', `${fmt(totals[y])} × ${fmt(pcts[y][a] / 100, 3)} ＝ 約 ${fmt(amount(y, a))}千人`],
       );
     },
@@ -709,7 +710,7 @@ function ageShare(r: Rng): Scene {
       return mkQ(
         'ratio',
         `${years[y2]}の40歳以上の${noun}は、${years[y1]}の「0〜19歳」の${noun}のおよそ何倍か。`,
-        numChoices(r, x, { dp, unit: '倍', traps: [over40 / pcts[y1][0], over40 / pcts[y2][0]] }),
+        numChoices(r, x, { dp, unit: '倍', traps: [trap(over40 / pcts[y1][0], WHY.pctOnly), trap(over40 / pcts[y2][0], WHY.pctOnly)] }),
         [
           `${years[y2]}の40歳以上： ${fmt(totals[y2])} × (${f1(pcts[y2][2])} ＋ ${f1(pcts[y2][3])})% ＝ 約 ${fmt((totals[y2] * over40) / 100)}千人`,
           `${years[y1]}の0〜19歳： ${fmt(totals[y1])} × ${f1(pcts[y1][0])}% ＝ 約 ${fmt(amount(y1, 0))}千人`,
@@ -728,7 +729,7 @@ function ageShare(r: Rng): Scene {
         numChoices(r, Math.abs(g), {
           dp: 1,
           unit: '%',
-          traps: [Math.abs(growth(pcts[0][a], pcts[2][a])), Math.abs(growth(totals[0], totals[2])), Math.abs(pcts[2][a] - pcts[0][a])],
+          traps: [trap(Math.abs(growth(pcts[0][a], pcts[2][a])), WHY.pctOnly), trap(Math.abs(growth(totals[0], totals[2])), WHY.totalOnly), trap(Math.abs(pcts[2][a] - pcts[0][a]), WHY.point)],
         }),
         [
           '構成比（%）の変化ではなく、人数に直してから比べる',
@@ -743,7 +744,7 @@ function ageShare(r: Rng): Scene {
       return mkQ(
         'sum',
         `${years[y]}の「20〜39歳」と「40〜64歳」を合わせた${noun}は、およそ何千人か。`,
-        numChoices(r, (totals[y] * p) / 100, { unit: '千人', traps: [amount(y, 1), amount(y, 2)] }),
+        numChoices(r, (totals[y] * p) / 100, { unit: '千人', traps: [trap(amount(y, 1), WHY.part), trap(amount(y, 2), WHY.part)] }),
         [`先に構成比を足す： ${f1(pcts[y][1])} ＋ ${f1(pcts[y][2])} ＝ ${f1(p)}%`, `${fmt(totals[y])} × ${fmt(p / 100, 3)} ＝ 約 ${fmt((totals[y] * p) / 100)}千人`],
       );
     },
@@ -777,7 +778,7 @@ function unitTrap(r: Rng): Scene {
       return mkQ(
         'rate',
         `翌${y0 + 4}年度の研究開発費が${fmt(next)}億円だったとすると、対前年度の増加率はおよそ何％か。`,
-        numChoices(r, g, { dp: 1, unit: '%', traps: [((next - last) / next) * 100] }),
+        numChoices(r, g, { dp: 1, unit: '%', traps: [trap(((next - last) / next) * 100, WHY.denom)] }),
         [
           `単位に注意： 表は「10億円」単位。${show(tens[3])} ＝ ${fmt(last)}億円`,
           `(${fmt(next)} − ${fmt(last)}) ÷ ${fmt(last)} ＝ 約 ${f1(g)}%`,
@@ -791,7 +792,7 @@ function unitTrap(r: Rng): Scene {
       return mkQ(
         'perunit',
         `${years[b]}の研究開発費は、${years[a]}より何億円多いか。`,
-        numChoices(r, d, { unit: '億円', exact: true, step: Math.max(1, Math.round(d * 0.15)), traps: [d * 10, oku[b]] }),
+        numChoices(r, d, { unit: '億円', exact: true, step: Math.max(1, Math.round(d * 0.15)), traps: [trap(d * 10, WHY.unit), trap(oku[b], WHY.part)] }),
         [`表の単位は「10億円」： ${show(tens[b])} − ${show(tens[a])} ＝ ${show(d)}（10億円）`, `${show(d)} × 10 ＝ ${fmt(d)}億円`],
       );
     },
@@ -802,7 +803,7 @@ function unitTrap(r: Rng): Scene {
       return mkQ(
         'rate',
         `${years[t]}の研究開発費の対前年度増加率は、およそ何％か。`,
-        numChoices(r, g, { dp: 1, unit: '%', traps: [((tens[t] - tens[t - 1]) / tens[t]) * 100] }),
+        numChoices(r, g, { dp: 1, unit: '%', traps: [trap(((tens[t] - tens[t - 1]) / tens[t]) * 100, WHY.denom)] }),
         ['同じ単位どうしの割り算なので、単位はそのままでよい', `(${show(tens[t])} − ${show(tens[t - 1])}) ÷ ${show(tens[t - 1])} ＝ 約 ${f1(g)}%`],
       );
     },
@@ -841,7 +842,7 @@ function weightedAge(r: Rng): Scene {
   const total = sumOf(staff);
   const makers: QMaker[] = [
     () =>
-      mkQ('sum', '4支店全体の平均年齢は、およそ何歳か。', numChoices(r, weighted, { dp: 1, unit: '歳', step: 9, traps: [simple] }), [
+      mkQ('sum', '4支店全体の平均年齢は、およそ何歳か。', numChoices(r, weighted, { dp: 1, unit: '歳', step: 9, traps: [trap(simple, WHY.simpleMean)] }), [
         '人数が違うので、平均年齢をそのまま平均してはいけない（人数で重みをつける）',
         `(人数 × 平均年齢) の合計 ＝ ${f1(sumOf(staff.map((s, i) => s * ages[i])))}、人数の合計 ＝ ${total}`,
         `${f1(sumOf(staff.map((s, i) => s * ages[i])))} ÷ ${total} ＝ 約 ${f1(weighted)}歳`,
@@ -854,7 +855,7 @@ function weightedAge(r: Rng): Scene {
       return mkQ(
         'sum',
         `${names[c]}と${names[e]}を合わせた平均年齢は、およそ何歳か。`,
-        numChoices(r, w, { dp: 1, unit: '歳', step: 9, traps: [sm] }),
+        numChoices(r, w, { dp: 1, unit: '歳', step: 9, traps: [trap(sm, WHY.simpleMean)] }),
         [
           `(${staff[c]} × ${f1(ages[c])} ＋ ${staff[e]} × ${f1(ages[e])}) ÷ (${staff[c]} ＋ ${staff[e]})`,
           `＝ ${f1(staff[c] * ages[c] + staff[e] * ages[e])} ÷ ${staff[c] + staff[e]} ＝ 約 ${f1(w)}歳`,
@@ -867,7 +868,7 @@ function weightedAge(r: Rng): Scene {
       return mkQ(
         'share',
         `4支店の従業員数の合計に占める${names[c]}の割合は、およそ何％か。`,
-        numChoices(r, (staff[c] / total) * 100, { dp: 1, unit: '%', traps: [(staff[c] / (total - staff[c])) * 100] }),
+        numChoices(r, (staff[c] / total) * 100, { dp: 1, unit: '%', traps: [trap((staff[c] / (total - staff[c])) * 100, WHY.exclude)] }),
         [`従業員数の合計 ＝ ${staff.join(' ＋ ')} ＝ ${total}`, `${staff[c]} ÷ ${total} ＝ 約 ${f1((staff[c] / total) * 100)}%`],
       );
     },
@@ -894,7 +895,7 @@ function trade(r: Rng): Scene {
       return mkQ(
         'sum',
         `${names[c]}の貿易${plus ? '黒字' : '赤字'}額（${plus ? '輸出額 − 輸入額' : '輸入額 − 輸出額'}）はいくらか。`,
-        numChoices(r, Math.abs(bal[c]), { unit: '億ドル', exact: true, traps: [Math.abs(bal[(c + 1) % 5]), Math.abs(bal[(c + 2) % 5])] }),
+        numChoices(r, Math.abs(bal[c]), { unit: '億ドル', exact: true, traps: [trap(Math.abs(bal[(c + 1) % 5]), WHY.otherRow), trap(Math.abs(bal[(c + 2) % 5]), WHY.otherRow)] }),
         [`${plus ? `${fmt(exp[c])} − ${fmt(imp[c])}` : `${fmt(imp[c])} − ${fmt(exp[c])}`} ＝ ${fmt(Math.abs(bal[c]))}億ドル`],
       );
     },
@@ -912,7 +913,7 @@ function trade(r: Rng): Scene {
       return mkQ(
         'share',
         `5か国の輸出額の合計に占める${names[c]}の割合は、およそ何％か。`,
-        numChoices(r, (exp[c] / total) * 100, { dp: 1, unit: '%', traps: [(exp[c] / sumOf(imp)) * 100, (imp[c] / sumOf(imp)) * 100] }),
+        numChoices(r, (exp[c] / total) * 100, { dp: 1, unit: '%', traps: [trap((exp[c] / sumOf(imp)) * 100, WHY.otherRow), trap((imp[c] / sumOf(imp)) * 100, WHY.otherRow)] }),
         [`輸出額の合計 ＝ ${exp.map((x) => fmt(x)).join(' ＋ ')} ＝ ${fmt(total)}`, `${fmt(exp[c])} ÷ ${fmt(total)} ＝ 約 ${f1((exp[c] / total) * 100)}%`],
       );
     },
@@ -922,7 +923,7 @@ function trade(r: Rng): Scene {
       return mkQ(
         'ratio',
         `${names[c]}の輸出額は、輸入額のおよそ何倍か。`,
-        numChoices(r, x, { dp: 2, unit: '倍', traps: [1 / x] }),
+        numChoices(r, x, { dp: 2, unit: '倍', traps: [trap(1 / x, WHY.inverse)] }),
         ['「A は B の何倍か」＝ A ÷ B', `${fmt(exp[c])} ÷ ${fmt(imp[c])} ＝ 約 ${f2(x)}倍`],
       );
     },

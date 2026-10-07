@@ -9,6 +9,7 @@ import { go, setResult, type ReviewItem } from '../lib/nav';
 import { Figure } from '../components/Figure';
 import { ChoiceLabel, Expr } from '../components/Expr';
 import { Calculator } from '../components/Calculator';
+import { CalcExplain, ItemWhy, PassageLessons } from '../components/Explain';
 
 export const ABC_TEXT: Record<'ronri' | 'shushi', [string, string, string]> = {
   ronri: ['本文から考えて、明らかに正しい', '本文から考えて、明らかに間違っている', '本文だけでは、どちらとも判断できない'],
@@ -347,11 +348,7 @@ function CalcView({
                 {time.toFixed(1)}秒（目安 {pace.toFixed(0)}秒）
               </span>
             </div>
-            <ul className="explain">
-              {q.explain.map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-            </ul>
+            <CalcExplain q={q} pick={pick} />
           </>
         )}
       </div>
@@ -391,7 +388,6 @@ function PassageView({
       <div className="pane-b">
         <div className="items">
           {q.items.map((it, i) => {
-            const ok = picks[i] === it.answer;
             return (
               <div className="item" key={i}>
                 <div className="text">
@@ -408,18 +404,12 @@ function PassageView({
                     );
                   })}
                 </div>
-                {revealed && (
-                  <div className="why">
-                    <b className={ok ? 'ok' : 'ng'}>
-                      {ok ? '○' : '×'} 正解は {it.answer}
-                    </b>
-                    {it.why}
-                  </div>
-                )}
+                {revealed && <ItemWhy format={q.format} pick={picks[i] ?? null} answer={it.answer} why={it.why} />}
               </div>
             );
           })}
         </div>
+        {revealed && <PassageLessons q={q} picks={picks} />}
       </div>
     </>
   );

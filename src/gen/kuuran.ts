@@ -2,7 +2,7 @@
 // 本番は 20問／20分 または 35問／35分（どちらも 1問 約60秒）。
 import type { CalcQ, Choice, Figure } from '../lib/types';
 import { type Rng, int, pick, shuffle, chance, weighted } from '../lib/rng';
-import { numChoices, fmt } from './choices';
+import { numChoices, fmt, trap, WHY } from './choices';
 
 export const KUURAN_PATTERNS = {
   prop: '比例（1あたりが一定）',
@@ -34,6 +34,7 @@ interface Built {
   figure: Figure;
   choices: Choice[];
   answer: number;
+  choiceNotes?: (string | undefined)[];
   explain: string[];
 }
 
@@ -183,7 +184,7 @@ function prop(r: Rng): Built {
     exact: true,
     rel: pick(r, [0.02, 0.03, 0.04]),
     // 「差」で考えてしまったときの値、ほかの列の平均
-    traps: askA ? [sumOf(others) / others.length] : [B[ref] + (A[blank] - A[ref]), sumOf(others) / others.length],
+    traps: askA ? [trap(sumOf(others) / others.length, WHY.noRule)] : [trap(B[ref] + (A[blank] - A[ref]), WHY.byDiff), trap(sumOf(others) / others.length, WHY.noRule)],
   });
   return {
     pattern: 'prop',
@@ -284,7 +285,7 @@ function linear(r: Rng): Built {
     exact: true,
     rel: pick(r, [0.03, 0.04, 0.06]),
     // 比例だと思い込んだときの値
-    traps: [(B[i] / A[i]) * A[blank], (B[j] / A[j]) * A[blank]],
+    traps: [trap((B[i] / A[i]) * A[blank], WHY.byRatio), trap((B[j] / A[j]) * A[blank], WHY.byRatio)],
   });
   return {
     pattern: 'linear',
@@ -334,7 +335,7 @@ function sumfix(r: Rng): Built {
           [t.b, ...cells(B, top ? -1 : blank)],
         ],
       },
-      ...numChoices(r, ans, { exact: true, rel: pick(r, [0.04, 0.06]), traps: [sumOf(rowVals) / rowVals.length, other] }),
+      ...numChoices(r, ans, { exact: true, rel: pick(r, [0.04, 0.06]), traps: [trap(sumOf(rowVals) / rowVals.length, WHY.noRule), other] }),
       explain: [
         `どの列も、2 つの行を足すと ${T} で一定（例： ${A[ref]} ＋ ${B[ref]} ＝ ${T}）`,
         `？ ＝ ${T} − ${other} ＝ ${ans}`,
@@ -360,7 +361,7 @@ function sumfix(r: Rng): Built {
       head: ['', ...t.cols.slice(0, n)],
       rows: [...t.parts.map((label, i) => [label, ...cells(parts[i], i === row ? blank : -1)]), [t.total, ...cells(totals)]],
     },
-    ...numChoices(r, ans, { exact: true, rel: pick(r, [0.04, 0.06]), traps: [totals[blank] - known[0], totals[blank] - known[1]] }),
+    ...numChoices(r, ans, { exact: true, rel: pick(r, [0.04, 0.06]), traps: [trap(totals[blank] - known[0], WHY.forgot), trap(totals[blank] - known[1], WHY.forgot)] }),
     explain: [
       `「${t.total}」は上の 3 行の合計になっている`,
       `？ ＝ ${fmt(totals[blank])} − ${fmt(known[0])} − ${fmt(known[1])} ＝ ${fmt(ans)}`,
@@ -408,7 +409,7 @@ function unitprice(r: Rng): Built | null {
           [t.total, ...all.map((x, i) => (i === 4 ? '？' : fmt(total(x))))],
         ],
       },
-      ...numChoices(r, ans, { exact: true, rel: pick(r, [0.03, 0.05]), traps: [q[0] * pb + q[1] * pa, total(q) - pb, total(q) + pa] }),
+      ...numChoices(r, ans, { exact: true, rel: pick(r, [0.03, 0.05]), traps: [trap(q[0] * pb + q[1] * pa, WHY.swapPrice), total(q) - pb, total(q) + pa] }),
       explain: [
         `${cols[ia]}と${cols[ib]}は${t.nb}だけが ${db} 違い、合計の差は ${fmt(db * pb)}円 → ${t.nb} 1つ ${fmt(pb)}円`,
         `${cols[ib]}と${cols[ic]}は${t.na}だけが ${da} 違い、合計の差は ${fmt(da * pa)}円 → ${t.na} 1つ ${fmt(pa)}円`,
@@ -443,7 +444,7 @@ function unitprice(r: Rng): Built | null {
     ...numChoices(r, ans, {
       exact: true,
       rel: pick(r, [0.03, 0.04]),
-      traps: [q[0] * prices[1] + q[1] * prices[0] + q[2] * prices[2], sumOf(q) * Math.round(sumOf(prices) / 3)],
+      traps: [trap(q[0] * prices[1] + q[1] * prices[0] + q[2] * prices[2], WHY.swapPrice), sumOf(q) * Math.round(sumOf(prices) / 3)],
     }),
     explain: [
       ...names.map(
@@ -479,7 +480,7 @@ function product(r: Rng): Built {
       ...numChoices(r, ans, {
         exact: true,
         rel: pick(r, [0.03, 0.05]),
-        traps: askQty ? [sales[blank] / price[blank], qty[ref]] : [(price[blank] * qty[blank]) / 10000, (price[blank] + qty[blank]) / 10],
+        traps: askQty ? [trap(sales[blank] / price[blank], WHY.unit), qty[ref]] : [trap((price[blank] * qty[blank]) / 10000, WHY.unit), (price[blank] + qty[blank]) / 10],
       }),
       explain: [
         `売上高（千円）＝ 単価 × 販売数 ÷ 1,000（例： ${fmt(price[ref])} × ${fmt(qty[ref])} ＝ ${fmt(price[ref] * qty[ref])}円 ＝ ${fmt(sales[ref])}千円）`,
@@ -510,7 +511,7 @@ function product(r: Rng): Built {
     ...numChoices(r, ans, {
       exact: true,
       rel: pick(r, [0.03, 0.05]),
-      traps: [lines[blank] * out[ref] / lines[ref], days[blank] * out[ref] / days[ref]],
+      traps: [trap(lines[blank] * out[ref] / lines[ref], WHY.oneFactor), trap(days[blank] * out[ref] / days[ref], WHY.oneFactor)],
     }),
     explain: [
       `生産量 ÷ (ライン数 × 日数) がどの月も ${k} で一定（例： ${fmt(out[ref])} ÷ (${lines[ref]} × ${days[ref]}) ＝ ${k}）`,
@@ -548,7 +549,7 @@ function hidden(r: Rng): Built {
     ...numChoices(r, ans, {
       exact: true,
       rel: pick(r, [0.04, 0.06]),
-      traps: [(T[ref] / A[ref]) * A[blank], B[blank] + T[ref] - B[ref], A[blank] * fee],
+      traps: [trap((T[ref] / A[ref]) * A[blank], WHY.hiddenRatio), B[blank] + T[ref] - B[ref], trap(A[blank] * fee, WHY.forgot)],
     }),
     explain: [
       `「${t.total} − ${t.b}」を出すと、${t.a} に比例している（例： (${show(T[ref])} − ${show(B[ref])}) ÷ ${fmt(A[ref])} ＝ ${fee}）`,
@@ -629,7 +630,7 @@ function growth(r: Rng): Built {
     ...numChoices(r, ans, {
       rel: pick(r, [0.04, 0.06]),
       // 「毎年同じ数だけ増える」と考えたときの値
-      traps: [prev + (prev - vals[blank - 2])],
+      traps: [trap(prev + (prev - vals[blank - 2]), WHY.linearGrowth)],
     }),
     explain: [
       `前の年度に対する倍率が一定： ${pairs.map((i) => `${fmt(vals[i + 1])} ÷ ${fmt(vals[i])} ＝ 約 ${ratio}`).join('、')}`,

@@ -191,5 +191,34 @@ const checkOverflow = async (page, label) => {
   await ctx.close();
 }
 
+// ---------- 解説の表示（縦に長い画面で、まちがえたときの解説を全部写す） ----------
+{
+  const { ctx, page } = await open({ width: 390, height: 1900, seed: SEEDED });
+  for (const f of ['shisoku', 'zuhyo', 'kuuran']) {
+    let found = false;
+    for (let s = 1; s <= 40 && !found; s++) {
+      await page.goto(`${BASE}#/q/${f}/drill?seed=${s}`);
+      await page.waitForSelector('.choice');
+      await page.locator('.choice').first().click();
+      await page.waitForSelector('.exp');
+      await checkOverflow(page, `解説 ${f} seed ${s}`);
+      // 「選んだ答えが違う理由」が出る問題を撮る
+      if (await page.locator('.diag').count()) {
+        await shot(page, `e-${f}`);
+        found = true;
+      }
+    }
+    if (!found) problems.push(`explain: ${f} で「違う理由」が一度も出なかった`);
+  }
+  await goto(page, '/q/ronri/drill?seed=2');
+  for (let i = 0; i < 4; i++) await page.locator('.item').nth(i).locator('.abc button').first().click();
+  await page.locator('.quiz-foot .btn.primary').click();
+  await page.waitForSelector('.lesson');
+  await checkOverflow(page, '解説 論理的読解');
+  await page.locator('.items').scrollIntoViewIfNeeded();
+  await shot(page, 'e-ronri', true);
+  await ctx.close();
+}
+
 await browser.close();
 console.log(problems.length ? `PROBLEMS:\n${problems.join('\n')}` : 'no problems found');

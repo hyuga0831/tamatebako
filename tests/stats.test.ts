@@ -243,3 +243,43 @@ describe('言語の長文', () => {
     }
   });
 });
+
+describe('解説', () => {
+  it('どの形式・どのパターンにも、考え方・公式・まちがえやすい点がある', async () => {
+    const { LESSONS, diagnose } = await import('../src/lib/lessons');
+    for (const f of FORMAT_ORDER) {
+      for (const p of Object.keys(FORMATS[f].patterns)) {
+        const l = LESSONS[f][p];
+        expect(l, `${f}/${p}`).toBeDefined();
+        expect(l.idea.length).toBeGreaterThan(0);
+        expect(l.formula.length).toBeGreaterThan(0);
+        expect(l.trap.length).toBeGreaterThan(0);
+      }
+      expect(Object.keys(LESSONS[f]).sort()).toEqual(Object.keys(FORMATS[f].patterns).sort());
+    }
+    for (const f of ['ronri', 'shushi'] as const) {
+      for (const a of ['A', 'B', 'C'] as const) {
+        for (const b of ['A', 'B', 'C'] as const) {
+          if (a === b) expect(diagnose(f, a, b)).toBeNull();
+          else expect(diagnose(f, a, b)).toBeTruthy();
+        }
+        expect(diagnose(f, null, a)).toBeNull();
+      }
+    }
+  });
+
+  it('まちがいの説明は、正解の選択肢には付かない', async () => {
+    const { genZuhyoSet } = await import('../src/gen/zuhyo');
+    const { genKuuran } = await import('../src/gen/kuuran');
+    let noted = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      for (const q of [...genZuhyoSet(mulberry32(seed), 3), genKuuran(mulberry32(seed))]) {
+        if (!q.choiceNotes) continue;
+        expect(q.choiceNotes.length).toBe(q.choices.length);
+        expect(q.choiceNotes[q.answer]).toBeUndefined();
+        noted += q.choiceNotes.filter(Boolean).length;
+      }
+    }
+    expect(noted).toBeGreaterThan(400);
+  });
+});

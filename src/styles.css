@@ -1830,3 +1830,117 @@ textarea {
     animation: none !important;
   }
 }
+
+/* ---------- 解説 ---------- */
+.exp {
+  display: grid;
+  gap: 10px;
+}
+
+.exp-title {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink-2);
+  letter-spacing: 0.02em;
+}
+
+ol.steps {
+  margin: 0;
+  padding: 12px 14px 12px 34px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 14.5px;
+  line-height: 1.7;
+  font-variant-numeric: tabular-nums;
+}
+
+ol.steps li + li {
+  margin-top: 3px;
+}
+
+.diag {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bad-soft);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.diag > b {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--bad);
+}
+
+.lesson {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.lesson h4 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.lesson ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.lesson li + li {
+  margin-top: 2px;
+}
+
+.lesson-head {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+details.lesson > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+details.lesson > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.lesson > summary::after {
+  content: ' ＋';
+}
+
+details.lesson[open] > summary::after {
+  content: ' −';
+}
+
+details.lesson[open] > summary {
+  margin-bottom: 2px;
+}
+
+.why > span {
+  margin-right: 4px;
+}
+
+.why-diag {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+  color: var(--ink);
+}
+
+.why-diag b {
+  color: var(--bad);
+}

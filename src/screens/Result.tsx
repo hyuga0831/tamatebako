@@ -7,7 +7,8 @@ import { getResult, go, quizPath, type ReviewItem } from '../lib/nav';
 import { exprText } from '../gen/shisoku';
 import { Meter } from '../components/Gauge';
 import { Figure } from '../components/Figure';
-import { ChoiceLabel, Expr } from '../components/Expr';
+import { Expr } from '../components/Expr';
+import { CalcExplain, ItemWhy, PassageLessons } from '../components/Explain';
 import { ABC_TEXT } from './Quiz';
 
 const mmss = (sec: number): string => {
@@ -106,11 +107,11 @@ export function Result() {
       </div>
 
       <h2 className="section-title">
-        ふり返り<span>タップで解き方を表示</span>
+        ふり返り<span>まちがえた問題は解説を開いてある</span>
       </h2>
       <div className="review">
         {ordered.map(({ r, no, v }) => (
-          <details className="rev" key={no}>
+          <details className="rev" key={no} open={v !== 'ok'}>
             <summary>
               <span className={`mk ${v}`}>{v === 'ok' ? '○' : v === 'ng' ? '×' : '–'}</span>
               <span className="q">
@@ -136,23 +137,7 @@ function ReviewBody({ r }: { r: ReviewItem }) {
       <>
         {q.figure && <Figure fig={q.figure} />}
         {q.expr ? <Expr toks={q.expr} /> : <p className="q-prompt">{q.prompt}</p>}
-        <p className="ans-line">
-          <span>
-            正解：
-            <b>
-              <ChoiceLabel c={q.choices[q.answer]} />
-            </b>
-          </span>
-          <span>
-            あなたの答え：
-            <b>{r.pick === null ? '未回答' : <ChoiceLabel c={q.choices[r.pick]} />}</b>
-          </span>
-        </p>
-        <ul className="explain">
-          {q.explain.map((e, i) => (
-            <li key={i}>{e}</li>
-          ))}
-        </ul>
+        <CalcExplain q={q} pick={r.pick} showPick />
       </>
     );
   }
@@ -165,25 +150,17 @@ function ReviewBody({ r }: { r: ReviewItem }) {
         ))}
       </div>
       <div className="items">
-        {q.items.map((it, i) => {
-          const ok = r.picks[i] === it.answer;
-          return (
-            <div className="item" key={i}>
-              <div className="text">
-                <span className="no">{i + 1}</span>
-                {it.text}
-              </div>
-              <div className="why">
-                <b className={ok ? 'ok' : 'ng'}>
-                  {ok ? '○' : '×'} 正解は {it.answer}（{legend['ABC'.indexOf(it.answer)]}）
-                </b>
-                <br />
-                あなたの答え：{r.picks[i] ?? '未回答'}。{it.why}
-              </div>
+        {q.items.map((it, i) => (
+          <div className="item" key={i}>
+            <div className="text">
+              <span className="no">{i + 1}</span>
+              {it.text}
             </div>
-          );
-        })}
+            <ItemWhy format={q.format} pick={r.picks[i] ?? null} answer={it.answer} why={it.why} legend={legend['ABC'.indexOf(it.answer)]} showPick />
+          </div>
+        ))}
       </div>
+      <PassageLessons q={q} picks={q.items.map((_, i) => r.picks[i] ?? null)} />
     </>
   );
 }

@@ -87,7 +87,10 @@ export interface CalcQ {
   prompt: string;
   choices: Choice[];
   answer: number;
+  /** この問題の解き方（手順） */
   explain: string[];
+  /** 選択肢ごとの「その値になるのは、どうまちがえたときか」。分かっているものだけ */
+  choiceNotes?: (string | undefined)[];
 }
 
 export interface PassageItem {
