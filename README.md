@@ -58,7 +58,7 @@ npm run build    # dist/ に本番用のファイルを作る
 
 ## 公開
 
-- 公開先：GitHub Pages（https://hyuga0831.github.io/tamatebako/ 。独自ドメイン `tamatebako.tougaxx.com` を付ける予定）
+- 公開先：https://tamatebako.tougaxx.com/ （GitHub Pages。DNS はお名前.com で、CNAME `tamatebako` → `hyuga0831.github.io`）
 - `main` に push すると、`.github/workflows/deploy.yml` がテスト → ビルド → 公開まで行う。テストが落ちたら公開されない。
 - 学習の記録は URL（オリジン）ごとに別になる。公開先の URL を変えるときは、先に設定画面の「書き出す」で記録を控える。
 
